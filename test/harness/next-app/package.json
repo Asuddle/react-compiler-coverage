@@ -1,0 +1,19 @@
+{
+  "name": "rcc-next-harness",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "build:unminified": "RCC_UNMINIFIED=1 next build",
+    "build:turbopack": "next build --turbopack",
+    "build:turbopack:unminified": "RCC_UNMINIFIED=1 next build --turbopack"
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "babel-plugin-react-compiler": "^1.0.0"
+  }
+}

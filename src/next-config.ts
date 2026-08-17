@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export interface NextConfigLoadResult {
+  options?: Record<string, unknown>;
+  warnings: string[];
+}
+
 export function extractReactCompilerOptions(
   config: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -14,27 +19,40 @@ export function extractReactCompilerOptions(
   return undefined;
 }
 
-/** Best-effort parse when TS loaders aren't available. */
+/** Best-effort parse when TS loaders aren't available. Returns guessed options. */
 export function parseReactCompilerFromSource(source: string): Record<string, unknown> | undefined {
-  const trueMatch = source.match(/reactCompiler\s*:\s*true\b/);
-  if (trueMatch) return {};
+  const patterns = [
+    /reactCompiler\s*:\s*true\b/,
+    /experimental\s*:\s*\{[^}]*reactCompiler\s*:\s*true/,
+  ];
+  if (patterns.some((p) => p.test(source))) return {};
 
-  const objMatch = source.match(/reactCompiler\s*:\s*(\{[\s\S]*?\})\s*,?\s*(?:\n|\r|$|\/\/|\/\*|\})/);
+  const objMatch =
+    source.match(/reactCompiler\s*:\s*(\{[\s\S]*?\})\s*,?\s*(?:\n|\r|$|\/\/|\/\*|\})/) ??
+    source.match(/experimental\s*:\s*\{[\s\S]*?reactCompiler\s*:\s*(\{[\s\S]*?\})/);
   if (!objMatch?.[1]) return undefined;
 
+  const objBody = objMatch[1];
   try {
-    // Wrap so bare keys are valid JS object literal for Function eval alternative
     const parsed = JSON.parse(
-      objMatch[1]
+      objBody
         .replace(/(\w+)\s*:/g, '"$1":')
         .replace(/'/g, '"'),
     ) as Record<string, unknown>;
     return parsed;
   } catch {
-    const mode = objMatch[1].match(/compilationMode\s*:\s*['"](\w+)['"]/);
+    const mode = objBody.match(/compilationMode\s*:\s*['"](\w+)['"]/);
     if (mode?.[1]) return { compilationMode: mode[1] };
     return {};
   }
+}
+
+function guessedConfigWarning(file: string): string {
+  return (
+    `Guessed reactCompiler options from ${path.basename(file)} source — regex parsing ` +
+    `can be wrong on conditionals, spreads, or computed values. Install tsx or esbuild ` +
+    `in this project for reliable next.config.ts loading.`
+  );
 }
 
 function loadJsModule(file: string, cwd: string): Record<string, unknown> | undefined {
@@ -82,8 +100,10 @@ function loadTypeScriptModule(file: string, cwd: string): Record<string, unknown
 }
 
 /** Load next.config.{js,mjs,cjs,ts} and extract reactCompiler options. */
-export function loadNextConfig(cwd: string): Record<string, unknown> | undefined {
+export function loadNextConfig(cwd: string): NextConfigLoadResult {
+  const warnings: string[] = [];
   const candidates = ['next.config.ts', 'next.config.js', 'next.config.mjs', 'next.config.cjs'];
+
   for (const name of candidates) {
     const file = path.join(cwd, name);
     if (!fs.existsSync(file)) continue;
@@ -94,20 +114,31 @@ export function loadNextConfig(cwd: string): Record<string, unknown> | undefined
         config = loadTypeScriptModule(file, cwd);
         if (!config) {
           const fromSource = parseReactCompilerFromSource(fs.readFileSync(file, 'utf8'));
-          if (fromSource) return fromSource;
+          if (fromSource) {
+            warnings.push(guessedConfigWarning(file));
+            return { options: fromSource, warnings };
+          }
           continue;
         }
       } else {
         config = loadJsModule(file, cwd);
       }
       const rc = extractReactCompilerOptions(config ?? {});
-      if (rc) return rc;
+      if (rc) return { options: rc, warnings };
     } catch {
       if (name.endsWith('.ts')) {
         const fromSource = parseReactCompilerFromSource(fs.readFileSync(file, 'utf8'));
-        if (fromSource) return fromSource;
+        if (fromSource) {
+          warnings.push(guessedConfigWarning(file));
+          return { options: fromSource, warnings };
+        }
       }
     }
   }
-  return undefined;
+  return { warnings };
+}
+
+/** @deprecated Use loadNextConfig(cwd).options */
+export function loadNextConfigOptions(cwd: string): Record<string, unknown> | undefined {
+  return loadNextConfig(cwd).options;
 }

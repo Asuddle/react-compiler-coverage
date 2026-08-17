@@ -10,6 +10,8 @@ import {
   reconcile,
   parseReactCompilerFromSource,
   loadNextConfig,
+  scanBuildOutput,
+  isMinifiedChunk,
 } from '../dist/index.js';
 
 test('buckets each component into the correct status', () => {
@@ -26,12 +28,12 @@ test('coverage percentage reflects only optimized components', () => {
   assert.equal(report.totals.total, 4);
   assert.equal(report.totals.optimized, 1);
   assert.equal(report.coveragePct, 25);
+  assert.equal(report.coverageAvailable, true);
 });
 
 test('parses TypeScript files instead of silently dropping them', () => {
   const report = runCoverage('test/fixtures-ts');
   const byName = Object.fromEntries(report.components.map((c) => [c.name, c.status]));
-  // Before TS-preset support, the type syntax threw and the file yielded [].
   assert.equal(report.totals.total, 1, 'the .tsx component must be enumerated');
   assert.equal(byName.TypedHeader, 'optimized');
 });
@@ -39,7 +41,6 @@ test('parses TypeScript files instead of silently dropping them', () => {
 test('diff flags an optimized -> silent regression', () => {
   const report = runCoverage('test/fixtures');
   const baseline = toBaseline(report);
-  // Pretend Header was optimized before; now simulate it going silent.
   const regressed = {
     ...report,
     components: report.components.map((c) =>
@@ -52,9 +53,9 @@ test('diff flags an optimized -> silent regression', () => {
   assert.equal(regressions[0].to, 'silent');
 });
 
-// Build a minimal report from [name, status] pairs (one synthetic file).
 const reportOf = (...pairs) => ({
   coveragePct: 0,
+  coverageAvailable: true,
   totals: {},
   components: pairs.map(([name, status]) => ({ file: 'f.jsx', name, status, reason: null })),
 });
@@ -177,23 +178,96 @@ test('parses reactCompiler options from next.config.ts source', () => {
   assert.deepEqual(opts, { compilationMode: 'annotation' });
 });
 
-test('loadNextConfig reads next.config.ts via source fallback', () => {
+test('loadNextConfig warns when guessing from next.config.ts source', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-next-'));
   fs.writeFileSync(
     path.join(dir, 'next.config.ts'),
     `const config = { reactCompiler: true };
 export default config;`,
   );
+  const result = loadNextConfig(dir);
+  assert.deepEqual(result.options, {});
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /Guessed reactCompiler options/);
+});
+
+test('SWC without build-dir marks coverage unavailable', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-swc-node'));
+  fs.writeFileSync(
+    path.join(dir, 'next.config.js'),
+    'module.exports = { reactCompiler: true };',
+  );
+  fs.writeFileSync(
+    path.join(dir, 'Header.jsx'),
+    `export function Header({ title }) { return <h1>{title}</h1>; }`,
+  );
   const cwd = process.cwd();
   process.chdir(dir);
   try {
-    assert.deepEqual(loadNextConfig(dir), {});
+    const report = runCoverage('Header.jsx', { backend: 'swc' });
+    assert.equal(report.coverageAvailable, false);
+    assert.equal(report.coveragePct, null);
+    assert.match(report.warnings.join(' '), /Coverage unavailable/);
+    assert.equal(report.components.find((c) => c.name === 'Header')?.status, 'silent');
   } finally {
     process.chdir(cwd);
   }
 });
 
-test('SWC build-dir output marks compiled components optimized', () => {
+test('detects Next.js client bundle compiler pattern (.c(N) + $[])', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-next-client-'));
+  const src = path.join(dir, 'ProductCard.jsx');
+  fs.writeFileSync(
+    src,
+    `'use client';
+export function ProductCard({ items, filter }) {
+  const visible = items.filter((i) => i.tag === filter);
+  return <div>{visible.map(i => <div key={i.id}>{i.name}</div>)}</div>;
+}`,
+  );
+  const buildDir = path.join(dir, '.next');
+  fs.mkdirSync(path.join(buildDir, 'static/chunks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(buildDir, 'static/chunks/app-page.js'),
+    `;// ./ProductCard.jsx
+function ProductCard(t0) {
+  const $ = react_compiler_runtime.c(7);
+  const { items, filter } = t0;
+  if ($[0] !== filter) { /* memo block */ }
+  return $[6];
+}`,
+  );
+
+  const report = runCoverage(src, { backend: 'swc', buildDir });
+  assert.equal(report.coverageAvailable, true);
+  assert.equal(report.components.find((c) => c.name === 'ProductCard')?.status, 'optimized');
+});
+
+test('detects Turbopack export-name + .c(N) pattern when function is mangled', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-turbo-'));
+  const src = path.join(dir, 'ProductCard.jsx');
+  fs.writeFileSync(
+    src,
+    `'use client';
+export function ProductCard({ items, filter }) {
+  return <div>{items.filter(i => i.tag === filter).map(i => <div key={i.id}>{i.name}</div>)}</div>;
+}`,
+  );
+  const buildDir = path.join(dir, '.next');
+  fs.mkdirSync(path.join(buildDir, 'static/chunks'), { recursive: true });
+  fs.writeFileSync(
+    path.join(buildDir, 'static/chunks/turbo.js'),
+    `(globalThis.TURBOPACK||[]).push(["/x",84619,t=>{t.s(["ProductCard",()=>i]);function i(t){let s=(0,r.c)(7);if(s[0]!==t.filter)s[2]=t.items.filter(x);return s[6]}}]);`,
+  );
+
+  const report = runCoverage(src, { backend: 'swc', buildDir });
+  assert.equal(report.buildBundler, 'turbopack');
+  assert.equal(report.coverageAvailable, true);
+  assert.equal(report.components.find((c) => c.name === 'ProductCard')?.status, 'optimized');
+  assert.match(report.coverageLabel, /client-component coverage/);
+});
+
+test('unminified build scan marks _c( babel output optimized', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-swc-'));
   const src = path.join(dir, 'Header.jsx');
   fs.writeFileSync(
@@ -207,7 +281,7 @@ test('SWC build-dir output marks compiled components optimized', () => {
   fs.mkdirSync(path.join(buildDir, 'static', 'chunks'), { recursive: true });
   fs.writeFileSync(
     path.join(buildDir, 'static', 'chunks', 'page.js'),
-    `// ${src.replace(/\\/g, '/')}
+    `;// ./Header.jsx
 function Header(props) {
   var upper = _c(0, function () { return props.title.toUpperCase(); });
   return _c(1, function () { return upper; }, [upper]);
@@ -216,6 +290,29 @@ import "react/compiler-runtime";`,
   );
 
   const report = runCoverage(src, { backend: 'swc', buildDir });
-  const header = report.components.find((c) => c.name === 'Header');
-  assert.equal(header?.status, 'optimized');
+  assert.equal(report.coverageAvailable, true);
+  assert.equal(report.components.find((c) => c.name === 'Header')?.status, 'optimized');
+});
+
+test('minified build scan is unreliable and unavailable', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-min-'));
+  const src = path.join(dir, 'Header.jsx');
+  fs.writeFileSync(src, `export function Header() { return <h1/>; }`);
+  const buildDir = path.join(dir, '.next');
+  fs.mkdirSync(path.join(buildDir, 'static', 'chunks'), { recursive: true });
+  // Single long line, _c present, no readable function Header
+  const minified =
+    `//${src.replace(/\\/g, '/')}` +
+    'a'.repeat(400) +
+    ';var h=function(e){return _c(0,function(){return e.t})};export{h as Header};';
+  fs.writeFileSync(path.join(buildDir, 'static', 'chunks', 'm.js'), minified);
+
+  assert.ok(isMinifiedChunk(minified, ['Header']));
+  const scan = scanBuildOutput(src, buildDir, [
+    { name: 'Header', file: src, startLine: 1, endLine: 1 },
+  ]);
+  assert.equal(scan.reliable, false);
+
+  const report = runCoverage(src, { backend: 'swc', buildDir });
+  assert.equal(report.coverageAvailable, false);
 });

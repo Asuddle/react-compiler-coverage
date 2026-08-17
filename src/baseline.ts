@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { CoverageReport } from './types.js';
 
 export interface Baseline {
-  coveragePct: number;
+  coveragePct: number | null;
   components: Record<string, string>;
 }
 

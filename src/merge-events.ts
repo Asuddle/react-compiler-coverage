@@ -5,7 +5,7 @@ import type { LoggerEvent } from './types.js';
 export function mergeBuildAndBabelEvents(
   babelEvents: LoggerEvent[],
   buildEvents: LoggerEvent[],
-  components: ComponentLocation[],
+  _components: ComponentLocation[],
 ): LoggerEvent[] {
   if (buildEvents.length === 0) return babelEvents;
 
@@ -16,7 +16,6 @@ export function mergeBuildAndBabelEvents(
   const filteredBabel = babelEvents.filter((e) => {
     if (e.kind === 'CompileSuccess') {
       const line = e.fnLoc?.start?.line ?? e.loc?.start?.line;
-      // Drop Babel-only success when build didn't confirm (SWC may differ)
       return line != null && buildOptimizedLines.has(line);
     }
     return true;
@@ -32,8 +31,4 @@ export function mergeBuildAndBabelEvents(
   });
 
   return [...filteredBabel, ...added];
-}
-
-export function hasBuildEvidence(buildEvents: LoggerEvent[]): boolean {
-  return buildEvents.length > 0;
 }

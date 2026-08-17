@@ -16,11 +16,11 @@ interface CliArgs {
 
 function parseArgs(argv: string[]): CliArgs {
   const allowSkipped = argv.includes('--allow-skipped');
+  const options: CoverageOptions = { allowUnavailable: argv.includes('--allow-unavailable') };
   const filtered: string[] = [];
-  const options: CoverageOptions = {};
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--allow-skipped') continue;
+    if (arg === '--allow-skipped' || arg === '--allow-unavailable') continue;
     if (arg === '--config') {
       options.config = argv[++i];
       continue;
@@ -39,7 +39,10 @@ function printReport(report: CoverageReport): void {
   const cwd = process.cwd();
   console.log('\nReact Compiler Coverage');
   if (report.backend !== 'unknown') {
-    console.log(` Compiler backend: ${report.backend}${report.backend === 'swc' ? ' (use --build-dir for production fidelity)' : ''}`);
+    console.log(` Compiler backend: ${report.backend}`);
+  }
+  if (!report.coverageAvailable) {
+    console.log(' Coverage: UNAVAILABLE (see warnings below)');
   }
   console.log('\u2500'.repeat(64));
   let lastFile = '';
@@ -53,7 +56,11 @@ function printReport(report: CoverageReport): void {
   }
   const t = report.totals;
   console.log('\n' + '\u2500'.repeat(64));
-  console.log(` Coverage: ${t.optimized}/${t.total} optimized (${report.coveragePct}%)`);
+  if (report.coverageAvailable && report.coveragePct != null) {
+    console.log(` ${report.coverageLabel}: ${t.optimized}/${t.total} optimized (${report.coveragePct}%)`);
+  } else {
+    console.log(` Components: ${report.components.length} enumerated (${report.coverageLabel})`);
+  }
   console.log(` optimized:${t.optimized}  error:${t.error}  opt-out:${t.skipped}  silent:${t.silent}`);
   if (report.skippedFiles.length > 0) {
     console.log(`\n Skipped files: ${report.skippedFiles.length}/${report.filesScanned} (not counted in coverage)`);
@@ -73,7 +80,12 @@ function printReport(report: CoverageReport): void {
   console.log('\u2500'.repeat(64) + '\n');
 }
 
-function gateExitCode(report: CoverageReport, allowSkipped: boolean): number | undefined {
+function gateExitCode(
+  report: CoverageReport,
+  allowSkipped: boolean,
+  allowUnavailable: boolean,
+): number | undefined {
+  if (!report.coverageAvailable && !allowUnavailable) return 3;
   if (report.totals.total === 0) return 2;
   if (!allowSkipped && report.skippedFiles.length > 0) return 1;
   return undefined;
@@ -83,13 +95,16 @@ function main(): void {
   const { cmd, target, options, allowSkipped } = parseArgs(process.argv.slice(2));
 
   if (cmd === 'report') {
-    printReport(runCoverage(target, options));
+    const report = runCoverage(target, options);
+    printReport(report);
+    const gate = gateExitCode(report, allowSkipped, options.allowUnavailable ?? false);
+    if (gate === 3) process.exit(3);
     return;
   }
 
   if (cmd === 'baseline') {
     const report = runCoverage(target, options);
-    const gate = gateExitCode(report, allowSkipped);
+    const gate = gateExitCode(report, allowSkipped, options.allowUnavailable ?? false);
     if (gate != null) process.exit(gate);
     writeBaseline(report, BASELINE_FILE);
     printReport(report);
@@ -100,9 +115,11 @@ function main(): void {
   if (cmd === 'check') {
     const report = runCoverage(target, options);
     printReport(report);
-    const gate = gateExitCode(report, allowSkipped);
+    const gate = gateExitCode(report, allowSkipped, options.allowUnavailable ?? false);
     if (gate != null) {
-      if (gate === 2) {
+      if (gate === 3) {
+        console.error('\u2717 Coverage unavailable — SWC build scan required (unminified --build-dir).\n');
+      } else if (gate === 2) {
         console.error('\u2717 No components found — check the target path or fix parse errors.\n');
       } else {
         console.error('\u2717 Files were skipped during analysis — coverage count may be understated.\n');
@@ -128,7 +145,7 @@ function main(): void {
 
   console.error(`Unknown command: ${cmd}`);
   console.error(
-    'Usage: react-compiler-coverage <report|baseline|check> [path] [--config compiler-options.json] [--build-dir .next] [--allow-skipped]\n',
+    'Usage: react-compiler-coverage <report|baseline|check> [path] [--config file.json] [--build-dir .next] [--allow-skipped] [--allow-unavailable]\n',
   );
   process.exit(2);
 }

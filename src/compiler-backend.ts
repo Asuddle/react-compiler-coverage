@@ -37,7 +37,7 @@ export type CompilerBackend = 'babel' | 'swc' | 'unknown';
  */
 export function detectCompilerBackend(cwd = process.cwd()): CompilerBackend {
   if (hasBabelCompilerPlugin(cwd)) return 'babel';
-  if (loadNextConfig(cwd) != null) return 'swc';
+  if (loadNextConfig(cwd).options != null) return 'swc';
   return 'unknown';
 }
 
@@ -47,4 +47,8 @@ export function defaultBuildDir(cwd = process.cwd()): string | undefined {
     if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) return dir;
   }
   return undefined;
+}
+
+export function loadProjectConfigWarnings(cwd = process.cwd()): string[] {
+  return loadNextConfig(cwd).warnings;
 }

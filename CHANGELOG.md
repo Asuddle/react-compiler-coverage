@@ -8,21 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Compiler options now mirror the real build.** Reads `babel-plugin-react-compiler`
-  options from `babel.config*` and `reactCompiler` from `next.config.js`. Override
-  with `--config`, `REACT_COMPILER_COVERAGE_CONFIG`, or `setCompilerOptions()`.
-- **Isolated Babel pass.** Sets `configFile: false` so project Babel config cannot
-  double-run or clash with the tool's transform.
-- **Broader component enumeration.** Detects `memo()`, `forwardRef()`, `lazy()`,
-  class components, `export default`, identifier-based HOC wrappers, and barrel
-  re-exports (`export { X } from './X'`).
-- **`next.config.ts` support.** Loads via tsx/esbuild when available, with regex
-  fallback for `reactCompiler` options.
-- **SWC/Turbopack path.** Detects SWC-backed Next.js projects; pass `--build-dir`
-  to infer optimized components from compiled output (`_c(` / `react/compiler-runtime`).
-- **Skipped files are visible.** Reports a summary of parse failures; `check` exits
-  non-zero when files are skipped (use `--allow-skipped` to override).
-- **Empty targets fail `check`.** Exits with code 2 when no components are found.
+- **Turbopack attribution.** Detects `(0,r.c)(N)` memo calls (not just `.c(N)`) and
+  matches mangled functions via export-name anchors (`"ProductCard"`).
+- **Honest SWC handling.** No `--build-dir` or minified builds report coverage as
+  unavailable (exit 3) instead of faking Babel simulation numbers.
+- **Unminified build scanning.** Detects minified chunks; supports Next client
+  bundles (`.c(N)` + `$[slots]`) in addition to Babel `_c(`.
+- **Server Component exclusion.** SWC files without reliable build markers are
+  excluded from the denominator with a warning.
+- **`next.config.ts` guess warning.** Regex fallback emits an explicit warning.
+- **Ground-truth harness.** `npm run test:harness` — minimal Next 15 app.
+
+### Changed
+
+- **Client-component coverage label.** CLI and report use `coverageLabel` (e.g.
+  `client-component coverage (SWC · turbopack)`) so App Router numbers aren't
+  misread as whole-app optimization.
+- **Bundler detection.** Reports `buildBundler` (`webpack` | `turbopack`) from build output.
+- **Harness: turbopack comparison.** `npm run test:harness:turbopack` runs webpack + turbopack builds.
+- **Compiler config fidelity.** Reads babel/next config; isolated Babel pass;
+  broader enumeration (memo, barrels, HOC refs); skipped-file reporting.
 
 ## [0.1.10] - 2026-08-18
 

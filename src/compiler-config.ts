@@ -60,22 +60,40 @@ function fromJsonFile(file: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
 }
 
+export interface ResolvedCompilerOptions {
+  options: Record<string, unknown>;
+  warnings: string[];
+}
+
 /**
  * Resolve React Compiler plugin options to mirror the user's real build.
- * Priority: inline options → programmatic override → REACT_COMPILER_COVERAGE_CONFIG
- * env → --config file → babel.config* → next.config* → {} (default mode).
  */
+export function resolveCompilerOptionsWithWarnings(
+  configPath?: string,
+  inline?: Record<string, unknown>,
+  cwd = process.cwd(),
+): ResolvedCompilerOptions {
+  const warnings: string[] = [];
+
+  if (inline && Object.keys(inline).length > 0) return { options: { ...inline }, warnings };
+  if (explicitOptions) return { options: { ...explicitOptions }, warnings };
+
+  const envPath = process.env.REACT_COMPILER_COVERAGE_CONFIG;
+  if (configPath) return { options: fromJsonFile(configPath), warnings };
+  if (envPath) return { options: fromJsonFile(envPath), warnings };
+
+  const babelOpts = fromBabelConfig(cwd);
+  if (babelOpts) return { options: babelOpts, warnings };
+
+  const next = loadNextConfig(cwd);
+  warnings.push(...next.warnings);
+  return { options: next.options ?? {}, warnings };
+}
+
+/** Resolve compiler options (warnings discarded — use resolveCompilerOptionsWithWarnings in coverage). */
 export function resolveCompilerOptions(
   configPath?: string,
   inline?: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (inline && Object.keys(inline).length > 0) return { ...inline };
-  if (explicitOptions) return { ...explicitOptions };
-
-  const envPath = process.env.REACT_COMPILER_COVERAGE_CONFIG;
-  if (configPath) return fromJsonFile(configPath);
-  if (envPath) return fromJsonFile(envPath);
-
-  const cwd = process.cwd();
-  return fromBabelConfig(cwd) ?? loadNextConfig(cwd) ?? {};
+  return resolveCompilerOptionsWithWarnings(configPath, inline).options;
 }
