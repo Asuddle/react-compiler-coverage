@@ -11,6 +11,7 @@ name: Publish to npm
 on:
   push:
     tags: ['v*']
+  workflow_dispatch: # manual test without a new tag
 
 jobs:
   publish:
@@ -50,6 +51,7 @@ jobs:
 
       - name: Publish to npm via Trusted Publishing
         run: |
+          echo "node $(node --version)  npm $(npm --version)"
           if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
             echo "::error::OIDC token not available. Ensure id-token: write is set on this job."
             exit 1
@@ -59,7 +61,24 @@ jobs:
             [ -f "$rc" ] && sed -i '/_authToken/d' "$rc" || true
           done
           unset NODE_AUTH_TOKEN NPM_TOKEN
-          npm publish --access public
+          if ! npm publish --access public 2>publish.err; then
+            echo "--- npm publish failed ---"
+            cat publish.err
+            if grep -q ENEEDAUTH publish.err; then
+              echo ""
+              echo "::error::Trusted Publisher is not configured (or does not match this repo/workflow)."
+              echo "Fix on npmjs.com → react-compiler-coverage → Settings → Trusted publishing:"
+              echo "  GitHub user/org:  Asuddle  (must match github.com/OWNER exactly)"
+              echo "  Repository:       react-compiler-coverage"
+              echo "  Workflow file:    publish.yml"
+              echo "  Allowed actions:  npm publish"
+              echo "Also connect GitHub at npmjs.com → Settings → Profile."
+              echo ""
+              echo "Until that is saved, publish manually from your machine:"
+              echo "  npm publish --access public"
+            fi
+            exit 1
+          fi
 
       - name: Create GitHub Release
         env:
