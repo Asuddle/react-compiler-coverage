@@ -1,9 +1,12 @@
 name: Publish to npm
 
-# Publishes when you push a version tag like v0.1.1 (what `npm run release`
-# does). The job publishes to npm and creates a GitHub Release whose notes come
-# from CHANGELOG.md. We intentionally trigger only on the tag — not on
-# `release: published` — so creating the Release here doesn't re-trigger the job.
+# Publishes when you push a version tag like v0.1.4 (what `npm run release`
+# does). Auth is via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret needed.
+# One-time setup on npmjs.com → package Settings → Trusted Publisher:
+#   Owner: Asuddle   Repository: react-compiler-coverage   Workflow: publish.yml
+# The job also creates a GitHub Release whose notes come from CHANGELOG.md.
+# We intentionally trigger only on the tag — not on `release: published` — so
+# creating the Release here doesn't re-trigger the job.
 on:
   push:
     tags: ['v*']
@@ -13,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release
-      id-token: write # npm provenance
+      id-token: write # npm Trusted Publishing + provenance (required)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,9 +48,8 @@ jobs:
             echo "No CHANGELOG.md section found for $VERSION"; exit 1
           fi
 
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Provenance is automatic with Trusted Publishing; no NPM_TOKEN needed.
+      - run: npm publish --access public
 
       - name: Create GitHub Release
         env:
