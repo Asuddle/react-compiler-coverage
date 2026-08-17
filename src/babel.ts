@@ -1,16 +1,48 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import type { TransformOptions } from '@babel/core';
+
+// Babel resolves preset/plugin *strings* relative to the user's project (cwd),
+// not to this package. So we resolve dependencies to absolute paths from the
+// right place: our own presets from THIS package's node_modules, and the
+// compiler plugin (a peer dependency) from the user's project.
+const requireHere = createRequire(import.meta.url);
+const REACT_PRESET = requireHere.resolve('@babel/preset-react');
+const TS_PRESET = requireHere.resolve('@babel/preset-typescript');
 
 /**
  * Babel presets for a source file. `.ts`/`.tsx` need the TypeScript preset or
- * the parser throws on type syntax; without this, TS files would fail to parse
- * and silently drop out of coverage.
+ * the parser throws on type syntax; without it TS files fail to parse and drop
+ * out of coverage.
  */
 export function presetsFor(file: string): NonNullable<TransformOptions['presets']> {
   const presets: NonNullable<TransformOptions['presets']> = [
-    ['@babel/preset-react', { runtime: 'automatic' }],
+    [REACT_PRESET, { runtime: 'automatic' }],
   ];
   if (/\.tsx?$/.test(file)) {
-    presets.push(['@babel/preset-typescript', { isTSX: file.endsWith('.tsx'), allExtensions: true }]);
+    presets.push([TS_PRESET, { isTSX: file.endsWith('.tsx'), allExtensions: true }]);
   }
   return presets;
+}
+
+let compilerPluginPath: string | undefined;
+
+/**
+ * Absolute path to `babel-plugin-react-compiler`, resolved from the user's
+ * project (it's a peer dependency and lives there, not in this package).
+ * Throws a clear, actionable error if it isn't installed.
+ */
+export function resolveCompilerPlugin(): string {
+  if (compilerPluginPath) return compilerPluginPath;
+  // Resolve relative to the user's cwd, regardless of where this package lives.
+  const requireFromCwd = createRequire(path.join(process.cwd(), '__resolve__.js'));
+  try {
+    compilerPluginPath = requireFromCwd.resolve('babel-plugin-react-compiler');
+  } catch {
+    throw new Error(
+      'babel-plugin-react-compiler is not installed in this project.\n' +
+        'Install it as a dev dependency:  npm install -D babel-plugin-react-compiler',
+    );
+  }
+  return compilerPluginPath;
 }

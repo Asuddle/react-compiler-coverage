@@ -3,6 +3,7 @@ import path from 'node:path';
 import { enumerateComponents } from './enumerate.js';
 import { collectEvents } from './collect.js';
 import { reconcile } from './reconcile.js';
+import { resolveCompilerPlugin } from './babel.js';
 import type { ComponentRecord, CoverageReport, CoverageTotals } from './types.js';
 
 const EXT = /\.(jsx?|tsx?)$/;
@@ -40,6 +41,9 @@ export function analyzeFile(file: string): ComponentRecord[] {
 
 /** Run coverage over a file or directory. */
 export function runCoverage(target: string): CoverageReport {
+  // Fail fast (once) if the peer-dependency compiler isn't installed, rather
+  // than reporting every file as skipped inside the per-file catch below.
+  resolveCompilerPlugin();
   const files = fs.statSync(target).isDirectory() ? walk(target) : [target];
   const components = files.flatMap(analyzeFile);
   const totals: CoverageTotals = { optimized: 0, error: 0, skipped: 0, silent: 0, total: components.length };

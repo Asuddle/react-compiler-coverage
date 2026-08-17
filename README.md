@@ -85,6 +85,10 @@ console.log(report.coveragePct, report.totals);
   declarations / arrow assignments and `use*` hooks. Exotic definitions may be
   missed.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Release notes on GitHub are generated from it.
+
 ## License
 
 MIT

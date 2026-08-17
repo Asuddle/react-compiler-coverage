@@ -1,5 +1,5 @@
 import { transformSync } from '@babel/core';
-import { presetsFor } from './babel.js';
+import { presetsFor, resolveCompilerPlugin } from './babel.js';
 import type { LoggerEvent } from './types.js';
 
 /**
@@ -13,7 +13,7 @@ export function collectEvents(code: string, file: string): LoggerEvent[] {
     presets: presetsFor(file),
     plugins: [
       [
-        'babel-plugin-react-compiler',
+        resolveCompilerPlugin(),
         { logger: { logEvent: (_f: string, e: LoggerEvent) => void events.push(e) } },
       ],
     ],

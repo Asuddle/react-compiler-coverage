@@ -68,4 +68,9 @@ function main(): void {
   process.exit(2);
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  console.error(`\n${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(2);
+}

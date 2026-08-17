@@ -1,6 +1,6 @@
 {
   "name": "react-compiler-coverage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Coverage reporting and a CI regression gate for the React Compiler. See which components are actually optimized, silently unoptimized, opted out, or erroring.",
   "type": "module",
   "bin": {
@@ -17,13 +17,19 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
     "report": "node dist/cli.js report test/fixtures",
-    "test": "node --test"
+    "test": "node --test",
+    "preversion": "npm run build && npm test",
+    "postversion": "git push --follow-tags",
+    "release": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major"
   },
   "keywords": [
     "react",
