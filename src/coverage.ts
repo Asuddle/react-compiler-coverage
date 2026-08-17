@@ -22,12 +22,18 @@ export function walk(dir: string): string[] {
   return out;
 }
 
-/** Analyze a single file into per-component records. Parse failures yield []. */
+/**
+ * Analyze a single file into per-component records. A file that fails to
+ * parse/transform yields [] but is reported to stderr — silently dropping it
+ * would understate coverage without anyone noticing.
+ */
 export function analyzeFile(file: string): ComponentRecord[] {
   const code = fs.readFileSync(file, 'utf8');
   try {
     return reconcile(enumerateComponents(code, file), collectEvents(code, file));
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    console.warn(`react-compiler-coverage: skipped ${file} (${msg})`);
     return [];
   }
 }

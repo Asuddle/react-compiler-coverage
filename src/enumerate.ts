@@ -15,7 +15,7 @@ const isComponentName = (n?: string | null): n is string =>
 export function enumerateComponents(code: string, file: string): ComponentLocation[] {
   const ast = parseSync(code, {
     filename: file,
-    presets: [['@babel/preset-react', { runtime: 'automatic' }]],
+    presets: presetsFor(file),
   });
   const comps: ComponentLocation[] = [];
   if (!ast) return comps;

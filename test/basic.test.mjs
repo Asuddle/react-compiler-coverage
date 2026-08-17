@@ -18,6 +18,14 @@ test('coverage percentage reflects only optimized components', () => {
   assert.equal(report.coveragePct, 25);
 });
 
+test('parses TypeScript files instead of silently dropping them', () => {
+  const report = runCoverage('test/fixtures-ts');
+  const byName = Object.fromEntries(report.components.map((c) => [c.name, c.status]));
+  // Before TS-preset support, the type syntax threw and the file yielded [].
+  assert.equal(report.totals.total, 1, 'the .tsx component must be enumerated');
+  assert.equal(byName.TypedHeader, 'optimized');
+});
+
 test('diff flags an optimized -> silent regression', () => {
   const report = runCoverage('test/fixtures');
   const baseline = toBaseline(report);
@@ -32,4 +40,33 @@ test('diff flags an optimized -> silent regression', () => {
   assert.equal(regressions.length, 1);
   assert.equal(regressions[0].from, 'optimized');
   assert.equal(regressions[0].to, 'silent');
+});
+
+// Build a minimal report from [name, status] pairs (one synthetic file).
+const reportOf = (...pairs) => ({
+  coveragePct: 0,
+  totals: {},
+  components: pairs.map(([name, status]) => ({ file: 'f.jsx', name, status, reason: null })),
+});
+
+test('adding an opt-out to an already-silent component is NOT a regression', () => {
+  const baseline = toBaseline(reportOf(['Widget', 'silent']));
+  const now = reportOf(['Widget', 'skipped']);
+  assert.deepEqual(diffAgainstBaseline(now, baseline), []);
+});
+
+test('a brand-new erroring component fails the gate', () => {
+  const baseline = toBaseline(reportOf(['Old', 'optimized']));
+  const now = reportOf(['Old', 'optimized'], ['NewBroken', 'error']);
+  const regressions = diffAgainstBaseline(now, baseline);
+  assert.equal(regressions.length, 1);
+  assert.equal(regressions[0].key, 'f.jsx:NewBroken');
+  assert.equal(regressions[0].from, '(new)');
+  assert.equal(regressions[0].to, 'error');
+});
+
+test('a brand-new silent component does NOT fail the gate', () => {
+  const baseline = toBaseline(reportOf(['Old', 'optimized']));
+  const now = reportOf(['Old', 'optimized'], ['NewSilent', 'silent']);
+  assert.deepEqual(diffAgainstBaseline(now, baseline), []);
 });

@@ -55,7 +55,12 @@ React Compiler Coverage
 ## CI gate
 
 `check` exits non-zero when a component drops in health (e.g. `optimized → silent`),
-so a PR that quietly breaks the compiler for a component fails the build. See
+so a PR that quietly breaks the compiler for a component fails the build. It also
+fails when a **newly added** component arrives in an `error` state (a Rules-of-React
+violation), since that's an unambiguous break introduced by the PR. New `silent`/
+`skipped` components don't fail the gate — they're common and often intentional.
+`silent` and `skipped` count as equally healthy, so adding a deliberate
+`'use no memo'` opt-out to a silent component isn't treated as a regression. See
 `.github/workflows/coverage.yml` for a ready-to-use workflow.
 
 ## Programmatic API
