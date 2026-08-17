@@ -1,36 +1,48 @@
 name: Publish to npm
 
-# Publishes when you push a version tag (e.g. v0.1.8).
+# Publishes when you push a version tag (e.g. v0.1.9).
 #
-# Auth: npm Trusted Publishing (OIDC) — no NPM_TOKEN needed.
-# One-time setup on npmjs.com (logged in as ahmadtaimoor):
-#   Package → react-compiler-coverage → Settings → Trusted publishing
-#   → GitHub Actions → User: Asuddle  Repo: react-compiler-coverage
-#   → Workflow: publish.yml  → Allowed actions: npm publish
-# Also link GitHub at npmjs.com → Account → Profile → Connect GitHub account.
+# Requires NPM_TOKEN secret (Granular Access Token):
+#   npmjs.com → Access Tokens → Generate New Token → Granular Access Token
+#   - Packages: Read and Write
+#   - Select package: react-compiler-coverage
+#   - Bypass 2FA: ON  ← required for CI
+#   GitHub → repo Settings → Secrets → NPM_TOKEN
 on:
   push:
     tags: ['v*']
-  workflow_dispatch: # manual test without a new tag
+  workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release
-      id-token: write # npm Trusted Publishing + provenance (required)
+      id-token: write # npm provenance attestations
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          # Do NOT set registry-url — it writes _authToken to .npmrc and breaks OIDC.
+          registry-url: https://registry.npmjs.org
 
       - run: npm ci
       - run: npm run build
       - run: npm test
 
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $VERSION"
+
       - name: Verify tag matches package.json version
+        if: github.event_name != 'workflow_dispatch'
         run: |
           PKG="v$(node -p "require('./package.json').version")"
           if [ "$PKG" != "${GITHUB_REF_NAME}" ]; then
@@ -39,48 +51,39 @@ jobs:
 
       - name: Extract release notes from CHANGELOG.md
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          awk -v ver="$VERSION" '
+          awk -v ver="${{ steps.ver.outputs.version }}" '
             $0 ~ "^## \\[" ver "\\]" { flag=1; next }
             flag && /^## \[/ { exit }
             flag { print }
           ' CHANGELOG.md > RELEASE_NOTES.md
           if [ ! -s RELEASE_NOTES.md ]; then
-            echo "No CHANGELOG.md section found for $VERSION"; exit 1
+            echo "No CHANGELOG.md section found for ${{ steps.ver.outputs.version }}"; exit 1
           fi
 
-      - name: Publish to npm via Trusted Publishing
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "node $(node --version)  npm $(npm --version)"
-          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
-            echo "::error::OIDC token not available. Ensure id-token: write is set on this job."
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is missing."
+            echo "Create a Granular Access Token at https://www.npmjs.com/settings/tokens"
+            echo "  - Read and Write packages, scoped to react-compiler-coverage"
+            echo "  - Bypass 2FA: ON"
+            echo "Add it as NPM_TOKEN at https://github.com/Asuddle/react-compiler-coverage/settings/secrets/actions"
             exit 1
           fi
-          # Strip any _authToken line so npm uses OIDC instead of an empty/wrong token.
-          for rc in "$NPM_CONFIG_USERCONFIG" "$HOME/.npmrc"; do
-            [ -f "$rc" ] && sed -i '/_authToken/d' "$rc" || true
-          done
-          unset NODE_AUTH_TOKEN NPM_TOKEN
-          if ! npm publish --access public 2>publish.err; then
-            echo "--- npm publish failed ---"
+          if ! npm publish --provenance --access public 2>publish.err; then
             cat publish.err
-            if grep -q ENEEDAUTH publish.err; then
-              echo ""
-              echo "::error::Trusted Publisher is not configured (or does not match this repo/workflow)."
-              echo "Fix on npmjs.com → react-compiler-coverage → Settings → Trusted publishing:"
-              echo "  GitHub user/org:  Asuddle  (must match github.com/OWNER exactly)"
-              echo "  Repository:       react-compiler-coverage"
-              echo "  Workflow file:    publish.yml"
-              echo "  Allowed actions:  npm publish"
-              echo "Also connect GitHub at npmjs.com → Settings → Profile."
-              echo ""
-              echo "Until that is saved, publish manually from your machine:"
-              echo "  npm publish --access public"
+            if grep -q E403 publish.err; then
+              echo "::error::NPM_TOKEN lacks publish permission."
+              echo "Create a NEW Granular token with Read+Write on react-compiler-coverage and Bypass 2FA enabled."
+              echo "Legacy/Classic tokens no longer work (removed Nov 2025)."
             fi
             exit 1
           fi
 
       - name: Create GitHub Release
+        if: github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md

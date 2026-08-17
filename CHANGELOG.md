@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-18
+
+### Changed
+
+- **CI publish uses Granular NPM_TOKEN.** Classic tokens are removed; workflow
+  expects a Granular Access Token with Read+Write and Bypass 2FA enabled.
+
 ## [0.1.8] - 2026-08-18
 
 ### Changed
