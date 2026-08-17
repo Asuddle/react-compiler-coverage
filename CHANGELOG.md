@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-18
+
+### Fixed
+
+- **CI publish on Node 24.** npm Trusted Publishing requires Node 22.14+ and npm
+  11.5.1+; the workflow was on Node 20, which caused publish to fail with 404.
+
 ## [0.1.4] - 2026-08-18
 
 ### Changed
