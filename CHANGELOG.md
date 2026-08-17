@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-18
+
+### Changed
+
+- **CI publish via npm Trusted Publishing.** Workflow uses OIDC only (no
+  `NPM_TOKEN`), compatible with the package's "disallow bypass 2FA tokens"
+  setting. Provenance is generated automatically.
+
 ## [0.1.9] - 2026-08-18
 
 ### Changed
