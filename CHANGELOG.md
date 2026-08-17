@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Compiler options now mirror the real build.** Reads `babel-plugin-react-compiler`
+  options from `babel.config*` and `reactCompiler` from `next.config.js`. Override
+  with `--config`, `REACT_COMPILER_COVERAGE_CONFIG`, or `setCompilerOptions()`.
+- **Isolated Babel pass.** Sets `configFile: false` so project Babel config cannot
+  double-run or clash with the tool's transform.
+- **Broader component enumeration.** Detects `memo()`, `forwardRef()`, `lazy()`,
+  class components, `export default`, identifier-based HOC wrappers, and barrel
+  re-exports (`export { X } from './X'`).
+- **`next.config.ts` support.** Loads via tsx/esbuild when available, with regex
+  fallback for `reactCompiler` options.
+- **SWC/Turbopack path.** Detects SWC-backed Next.js projects; pass `--build-dir`
+  to infer optimized components from compiled output (`_c(` / `react/compiler-runtime`).
+- **Skipped files are visible.** Reports a summary of parse failures; `check` exits
+  non-zero when files are skipped (use `--allow-skipped` to override).
+- **Empty targets fail `check`.** Exits with code 2 when no components are found.
+
 ## [0.1.10] - 2026-08-18
 
 ### Changed

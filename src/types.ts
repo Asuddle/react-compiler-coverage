@@ -30,8 +30,30 @@ export interface CoverageTotals {
   total: number;
 }
 
+export interface SkippedFile {
+  file: string;
+  reason: string;
+}
+
+export type CompilerBackend = 'babel' | 'swc' | 'unknown';
+
+export interface CoverageOptions {
+  /** Path to a JSON file with React Compiler plugin options. */
+  config?: string;
+  /** Inline compiler plugin options (overrides project config). */
+  compilerOptions?: Record<string, unknown>;
+  /** Build output dir for SWC/Turbopack verification (.next, dist, build). */
+  buildDir?: string;
+  /** Force compiler backend detection (default: auto). */
+  backend?: CompilerBackend;
+}
+
 export interface CoverageReport {
   components: ComponentRecord[];
   totals: CoverageTotals;
   coveragePct: number;
+  filesScanned: number;
+  skippedFiles: SkippedFile[];
+  warnings: string[];
+  backend: CompilerBackend;
 }

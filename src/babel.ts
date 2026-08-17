@@ -10,6 +10,12 @@ const requireHere = createRequire(import.meta.url);
 const REACT_PRESET = requireHere.resolve('@babel/preset-react');
 const TS_PRESET = requireHere.resolve('@babel/preset-typescript');
 
+/** Isolated parse/transform — never merge with the project's babel.config. */
+export const ISOLATED_BABEL: Pick<TransformOptions, 'configFile' | 'babelrc'> = {
+  configFile: false,
+  babelrc: false,
+};
+
 /**
  * Babel presets for a source file. `.ts`/`.tsx` need the TypeScript preset or
  * the parser throws on type syntax; without it TS files fail to parse and drop
