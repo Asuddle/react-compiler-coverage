@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-18
+
+### Changed
+
+- **CI publish uses NPM_TOKEN again.** Trusted Publishing requires one-time
+  setup on npmjs.com that wasn't configured; switched back to an Automation
+  token (`NPM_TOKEN` GitHub secret) with a clear error if it's missing.
+
 ## [0.1.6] - 2026-08-18
 
 ### Fixed
