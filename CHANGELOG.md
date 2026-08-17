@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-18
+
+### Changed
+
+- **CI publish uses npm Trusted Publishing.** The publish workflow now
+  authenticates via GitHub OIDC instead of a long-lived `NPM_TOKEN`, fixing
+  403 errors from under-permissioned tokens. Provenance is generated
+  automatically.
+
 ## [0.1.3] - 2026-08-18
 
 ### Changed
