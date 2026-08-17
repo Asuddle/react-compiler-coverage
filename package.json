@@ -4,7 +4,7 @@
   "description": "Coverage reporting and a CI regression gate for the React Compiler. See which components are actually optimized, silently unoptimized, opted out, or erroring.",
   "type": "module",
   "bin": {
-    "react-compiler-coverage": "./dist/cli.js"
+    "react-compiler-coverage": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -57,5 +57,13 @@
     "@types/babel__core": "^7.20.5",
     "@types/node": "^20.11.0",
     "typescript": "^5.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Asuddle/react-compiler-coverage.git"
+  },
+  "homepage": "https://github.com/Asuddle/react-compiler-coverage#readme",
+  "bugs": {
+    "url": "https://github.com/Asuddle/react-compiler-coverage/issues"
   }
 }

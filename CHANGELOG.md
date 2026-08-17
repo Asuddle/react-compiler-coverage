@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-18
+
+### Changed
+
+- **npm package metadata.** Added `repository`, `homepage`, and `bugs` fields so
+  the npm page links to GitHub. Fixed the `bin` path format npm expects.
+
 ## [0.1.1] - 2026-08-18
 
 ### Fixed
