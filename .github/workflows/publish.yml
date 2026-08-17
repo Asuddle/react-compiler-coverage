@@ -1,13 +1,16 @@
 name: Publish to npm
 
-# Publishes when you push a version tag (e.g. v0.1.9).
+# Auth: npm Trusted Publishing (OIDC) — the only CI path if your package
+# has "disallow tokens" enabled (npm's recommended setting).
 #
-# Requires NPM_TOKEN secret (Granular Access Token):
-#   npmjs.com → Access Tokens → Generate New Token → Granular Access Token
-#   - Packages: Read and Write
-#   - Select package: react-compiler-coverage
-#   - Bypass 2FA: ON  ← required for CI
-#   GitHub → repo Settings → Secrets → NPM_TOKEN
+# One-time setup (logged in as ahmadtaimoor on npmjs.com):
+#   1. Profile → Connect GitHub account (Asuddle)
+#   2. react-compiler-coverage → Settings → Trusted publishing → GitHub Actions
+#      User: Asuddle  Repo: react-compiler-coverage  Workflow: publish.yml
+#      Allowed actions: npm publish
+#   3. Publishing access: keep default OR "disallow tokens" (both work with OIDC)
+#
+# NPM_TOKEN does NOT work when "disallow tokens" is enabled on the package.
 on:
   push:
     tags: ['v*']
@@ -17,14 +20,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the GitHub Release
-      id-token: write # npm provenance attestations
+      contents: write
+      id-token: write # required for Trusted Publishing + provenance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          # Do NOT set registry-url — breaks OIDC (empty _authToken in .npmrc).
 
       - run: npm ci
       - run: npm run build
@@ -39,7 +42,6 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing version $VERSION"
 
       - name: Verify tag matches package.json version
         if: github.event_name != 'workflow_dispatch'
@@ -60,24 +62,31 @@ jobs:
             echo "No CHANGELOG.md section found for ${{ steps.ver.outputs.version }}"; exit 1
           fi
 
-      - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm (Trusted Publishing / OIDC)
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::NPM_TOKEN secret is missing."
-            echo "Create a Granular Access Token at https://www.npmjs.com/settings/tokens"
-            echo "  - Read and Write packages, scoped to react-compiler-coverage"
-            echo "  - Bypass 2FA: ON"
-            echo "Add it as NPM_TOKEN at https://github.com/Asuddle/react-compiler-coverage/settings/secrets/actions"
-            exit 1
-          fi
-          if ! npm publish --provenance --access public 2>publish.err; then
+          echo "node $(node --version)  npm $(npm --version)"
+          # Remove any auth lines so npm uses OIDC, not a blocked/empty token.
+          for rc in "$NPM_CONFIG_USERCONFIG" "$HOME/.npmrc"; do
+            [ -f "$rc" ] && sed -i '/_authToken/d' "$rc" && sed -i '/always-auth/d' "$rc" || true
+          done
+          unset NODE_AUTH_TOKEN NPM_TOKEN
+          if ! npm publish --access public 2>publish.err; then
             cat publish.err
-            if grep -q E403 publish.err; then
-              echo "::error::NPM_TOKEN lacks publish permission."
-              echo "Create a NEW Granular token with Read+Write on react-compiler-coverage and Bypass 2FA enabled."
-              echo "Legacy/Classic tokens no longer work (removed Nov 2025)."
+            echo ""
+            if grep -qE 'ENEEDAUTH|E403|403' publish.err; then
+              echo "::error::npm rejected the publish."
+              echo ""
+              echo "If you see 403 with NPM_TOKEN: your package likely has"
+              echo "'disallow tokens' enabled — tokens cannot publish, period."
+              echo ""
+              echo "Fix (5 min, one time):"
+              echo "  1. npmjs.com → Settings → Profile → Connect GitHub (Asuddle)"
+              echo "  2. npmjs.com → react-compiler-coverage → Settings → Trusted publishing"
+              echo "     GitHub Actions | Asuddle | react-compiler-coverage | publish.yml | npm publish"
+              echo "  3. Delete NPM_TOKEN from GitHub secrets (not used, may interfere)"
+              echo "  4. Re-run this workflow"
+              echo ""
+              echo "Or publish manually: npm publish --access public  (enter 2FA code)"
             fi
             exit 1
           fi
