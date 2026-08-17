@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-18
+
+### Fixed
+
+- **CI publish 404 with Trusted Publishing.** `actions/setup-node`'s
+  `registry-url` option writes an empty `_authToken` to `.npmrc`, which makes
+  npm skip the OIDC handshake. Removed it so Trusted Publishing can authenticate.
+
 ## [0.1.5] - 2026-08-18
 
 ### Fixed

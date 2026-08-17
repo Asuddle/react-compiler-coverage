@@ -22,7 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          # Do NOT set registry-url here — it writes _authToken=${NODE_AUTH_TOKEN}
+          # to .npmrc, which makes npm skip OIDC and fail with 404 when no token
+          # secret is configured. Trusted Publishing uses the default registry.
       - run: npm ci
       - run: npm run build
       - run: npm test
