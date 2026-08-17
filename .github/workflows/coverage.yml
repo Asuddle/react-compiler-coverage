@@ -9,5 +9,13 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      # Fails the PR if any component regresses (optimized -> silent/skip/error)
-      - run: npx react-compiler-coverage check src
+      # This repo builds from source, so compile the CLI before running it.
+      # In a CONSUMER project you install react-compiler-coverage from npm
+      # (which ships `dist/`) and can drop this step, running just:
+      #   npx react-compiler-coverage check src
+      - run: npm run build
+      # Fails the PR if any tracked component regresses (optimized -> silent/
+      # skipped/error) or a new erroring component is introduced. The baseline
+      # (.react-compiler-coverage.json) is committed; refresh it with
+      #   npx react-compiler-coverage baseline test/fixtures
+      - run: node dist/cli.js check test/fixtures

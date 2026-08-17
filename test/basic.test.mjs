@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runCoverage, diffAgainstBaseline, toBaseline } from '../dist/index.js';
+import { runCoverage, diffAgainstBaseline, toBaseline, reconcile } from '../dist/index.js';
 
 test('buckets each component into the correct status', () => {
   const report = runCoverage('test/fixtures');
@@ -47,6 +47,17 @@ const reportOf = (...pairs) => ({
   coveragePct: 0,
   totals: {},
   components: pairs.map(([name, status]) => ({ file: 'f.jsx', name, status, reason: null })),
+});
+
+test('attributes an event to the narrowest enclosing component (nested)', () => {
+  const comps = [
+    { name: 'Outer', file: 'f.jsx', startLine: 1, endLine: 10 },
+    { name: 'Inner', file: 'f.jsx', startLine: 4, endLine: 6 },
+  ];
+  const events = [{ kind: 'CompileSuccess', fnLoc: { start: { line: 5 } }, memoBlocks: 1 }];
+  const byName = Object.fromEntries(reconcile(comps, events).map((r) => [r.name, r.status]));
+  assert.equal(byName.Inner, 'optimized', 'inner (tighter range) must own the event');
+  assert.equal(byName.Outer, 'silent', 'outer must not steal the nested event');
 });
 
 test('adding an opt-out to an already-silent component is NOT a regression', () => {

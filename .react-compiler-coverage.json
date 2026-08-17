@@ -1,0 +1,9 @@
+{
+  "coveragePct": 25,
+  "components": {
+    "test/fixtures/components.jsx:ProductCard": "silent",
+    "test/fixtures/components.jsx:LegacyWidget": "skipped",
+    "test/fixtures/components.jsx:BrokenComponent": "error",
+    "test/fixtures/components.jsx:Header": "optimized"
+  }
+}

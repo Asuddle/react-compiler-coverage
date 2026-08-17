@@ -5,7 +5,8 @@ function extractReason(detail: unknown): string {
   if (!detail) return 'compile error';
   if (typeof detail === 'string') return detail.split('.')[0] ?? detail;
   const d = detail as Record<string, unknown>;
-  const msg = (d.reason ?? d.description ?? d.severity ?? '') as string;
+  // `severity` is a level ("Error"), not a human message — don't use it as one.
+  const msg = (d.reason ?? d.description ?? d.message ?? '') as string;
   return String(msg).split('.')[0] || 'compile error';
 }
 
@@ -16,8 +17,18 @@ function extractReason(detail: unknown): string {
  */
 export function reconcile(comps: ComponentLocation[], events: LoggerEvent[]): ComponentRecord[] {
   const records: ComponentRecord[] = comps.map((c) => ({ ...c, status: 'silent', reason: null }));
-  const owner = (line?: number) =>
-    line == null ? undefined : records.find((r) => line >= r.startLine && line <= r.endLine);
+  // Attribute to the NARROWEST enclosing component. A component defined inside
+  // another (or a hook inside a component) shares the outer line range, so the
+  // first match would misattribute the event to the outer one.
+  const owner = (line?: number) => {
+    if (line == null) return undefined;
+    let best: ComponentRecord | undefined;
+    for (const r of records) {
+      if (line < r.startLine || line > r.endLine) continue;
+      if (!best || r.endLine - r.startLine < best.endLine - best.startLine) best = r;
+    }
+    return best;
+  };
 
   for (const e of events) {
     const line = e.fnLoc?.start?.line ?? e.loc?.start?.line;

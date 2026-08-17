@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-// 1) Clean component — compiler SHOULD optimize this (CompileSuccess)
+// 1) Compiler emits no event for this one — enumerated but 'silent'.
 export function ProductCard({ items, filter }) {
   const visible = items.filter((i) => i.tag === filter);
   const onClick = (id) => console.log(id);
@@ -23,7 +23,7 @@ export function BrokenComponent({ enabled }) {
   return <p>disabled</p>;
 }
 
-// 4) Another clean one, to prove multi-success aggregation
+// 4) Clean component the compiler optimizes (CompileSuccess)
 export function Header({ title }) {
   const upper = title.toUpperCase();
   return <h1>{upper}</h1>;
