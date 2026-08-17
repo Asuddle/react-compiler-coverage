@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-08-18
+
+### Changed
+
+- **CI publish: Trusted Publishing only.** Granular tokens now 403 in CI;
+  workflow uses OIDC exclusively and strips any `.npmrc` auth lines that
+  would block the handshake.
+
 ## [0.1.7] - 2026-08-18
 
 ### Changed

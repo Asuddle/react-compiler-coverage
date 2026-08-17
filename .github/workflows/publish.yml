@@ -1,11 +1,13 @@
 name: Publish to npm
 
-# Publishes when you push a version tag (e.g. v0.1.7).
+# Publishes when you push a version tag (e.g. v0.1.8).
 #
-# One-time setup: add an npm Automation token as the NPM_TOKEN repository secret.
-#   1. https://www.npmjs.com/settings/tokens → Generate New Token → Classic → Automation
-#   2. https://github.com/Asuddle/react-compiler-coverage/settings/secrets/actions
-#      → New repository secret → Name: NPM_TOKEN
+# Auth: npm Trusted Publishing (OIDC) — no NPM_TOKEN needed.
+# One-time setup on npmjs.com (logged in as ahmadtaimoor):
+#   Package → react-compiler-coverage → Settings → Trusted publishing
+#   → GitHub Actions → User: Asuddle  Repo: react-compiler-coverage
+#   → Workflow: publish.yml  → Allowed actions: npm publish
+# Also link GitHub at npmjs.com → Account → Profile → Connect GitHub account.
 on:
   push:
     tags: ['v*']
@@ -15,13 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release
-      id-token: write # npm provenance attestations
+      id-token: write # npm Trusted Publishing + provenance (required)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          # Do NOT set registry-url — it writes _authToken to .npmrc and breaks OIDC.
 
       - run: npm ci
       - run: npm run build
@@ -35,7 +37,6 @@ jobs:
           fi
 
       - name: Extract release notes from CHANGELOG.md
-        id: notes
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v ver="$VERSION" '
@@ -47,17 +48,18 @@ jobs:
             echo "No CHANGELOG.md section found for $VERSION"; exit 1
           fi
 
-      - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm via Trusted Publishing
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::NPM_TOKEN secret is not set."
-            echo "Create an npm Automation token at https://www.npmjs.com/settings/tokens"
-            echo "Then add it at https://github.com/Asuddle/react-compiler-coverage/settings/secrets/actions"
+          if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+            echo "::error::OIDC token not available. Ensure id-token: write is set on this job."
             exit 1
           fi
-          npm publish --provenance --access public
+          # Strip any _authToken line so npm uses OIDC instead of an empty/wrong token.
+          for rc in "$NPM_CONFIG_USERCONFIG" "$HOME/.npmrc"; do
+            [ -f "$rc" ] && sed -i '/_authToken/d' "$rc" || true
+          done
+          unset NODE_AUTH_TOKEN NPM_TOKEN
+          npm publish --access public
 
       - name: Create GitHub Release
         env:
