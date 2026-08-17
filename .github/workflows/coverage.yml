@@ -1,0 +1,13 @@
+name: React Compiler Coverage
+on: [pull_request]
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Fails the PR if any component regresses (optimized -> silent/skip/error)
+      - run: npx react-compiler-coverage check src

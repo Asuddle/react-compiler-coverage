@@ -1,0 +1,55 @@
+{
+  "name": "react-compiler-coverage",
+  "version": "0.1.0",
+  "description": "Coverage reporting and a CI regression gate for the React Compiler. See which components are actually optimized, silently unoptimized, opted out, or erroring.",
+  "type": "module",
+  "bin": {
+    "react-compiler-coverage": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
+    "report": "node dist/cli.js report test/fixtures",
+    "test": "node --test"
+  },
+  "keywords": [
+    "react",
+    "react-compiler",
+    "performance",
+    "coverage",
+    "memoization",
+    "ci",
+    "regression",
+    "babel"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.29.7"
+  },
+  "peerDependencies": {
+    "babel-plugin-react-compiler": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
