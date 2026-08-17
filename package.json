@@ -1,6 +1,6 @@
 {
   "name": "react-compiler-coverage",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Coverage reporting and a CI regression gate for the React Compiler. See which components are actually optimized, silently unoptimized, opted out, or erroring.",
   "type": "module",
   "bin": {
