@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Component triage (Babel logger).** `triage.ts` classifies each component as
+  `optimized`, `wont-benefit` (certified fine), `fixable-bail`, `unsupported`, or
+  `opted-out` from the full logger stream. Category-aware routing (Todo →
+  unsupported; PreserveManualMemo highlighted in CLI).
+- **`npm run test:triage`** — 7/7 validation harness against real compiler.
+- Baseline v2 stores optional `triage` map; CI fails on `optimized → fixable-bail`,
+  warns on `optimized → wont-benefit`. `coveragePct` denominator unchanged.
+- **`--strict`** restores the pre-triage CI gate (fail on any health drop,
+  including `optimized → silent`).
+
 ### Fixed
 
 - **Turbopack attribution.** Detects `(0,r.c)(N)` memo calls (not just `.c(N)`) and
@@ -21,6 +33,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **CI gate is looser on v2 baselines.** `check` no longer fails on
+  `optimized → silent` / `wont-benefit` — it warns. That drop is usually a
+  legitimate simplification; it can also hide an accidental de-optimization.
+  Use `--strict` if your CI depended on the old fail. **v1 baselines (no
+  `triage` map) keep the old gate** until you re-run `baseline`.
 - **Client-component coverage label.** CLI and report use `coverageLabel` (e.g.
   `client-component coverage (SWC · turbopack)`) so App Router numbers aren't
   misread as whole-app optimization.

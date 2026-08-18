@@ -38,19 +38,37 @@ test('parses TypeScript files instead of silently dropping them', () => {
   assert.equal(byName.TypedHeader, 'optimized');
 });
 
-test('diff flags an optimized -> silent regression', () => {
+test('diff warns on optimized -> wont-benefit de-optimization', () => {
   const report = runCoverage('test/fixtures');
   const baseline = toBaseline(report);
   const regressed = {
     ...report,
     components: report.components.map((c) =>
-      c.name === 'Header' ? { ...c, status: 'silent' } : c
+      c.name === 'Header' ? { ...c, status: 'silent', triageStatus: 'wont-benefit' } : c,
     ),
   };
-  const regressions = diffAgainstBaseline(regressed, baseline);
+  const { regressions, warnings } = diffAgainstBaseline(regressed, baseline);
+  assert.equal(regressions.length, 0);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].from, 'optimized');
+  assert.equal(warnings[0].to, 'wont-benefit');
+});
+
+test('diff flags optimized -> fixable-bail regression', () => {
+  const report = runCoverage('test/fixtures');
+  const baseline = toBaseline(report);
+  const regressed = {
+    ...report,
+    components: report.components.map((c) =>
+      c.name === 'Header'
+        ? { ...c, status: 'error', triageStatus: 'fixable-bail', category: 'Refs' }
+        : c,
+    ),
+  };
+  const { regressions } = diffAgainstBaseline(regressed, baseline);
   assert.equal(regressions.length, 1);
   assert.equal(regressions[0].from, 'optimized');
-  assert.equal(regressions[0].to, 'silent');
+  assert.equal(regressions[0].to, 'fixable-bail');
 });
 
 const reportOf = (...pairs) => ({
@@ -74,23 +92,109 @@ test('attributes an event to the narrowest enclosing component (nested)', () => 
 test('adding an opt-out to an already-silent component is NOT a regression', () => {
   const baseline = toBaseline(reportOf(['Widget', 'silent']));
   const now = reportOf(['Widget', 'skipped']);
-  assert.deepEqual(diffAgainstBaseline(now, baseline), []);
+  assert.deepEqual(diffAgainstBaseline(now, baseline).regressions, []);
 });
 
 test('a brand-new erroring component fails the gate', () => {
-  const baseline = toBaseline(reportOf(['Old', 'optimized']));
-  const now = reportOf(['Old', 'optimized'], ['NewBroken', 'error']);
-  const regressions = diffAgainstBaseline(now, baseline);
+  const baseline = toBaseline({
+    ...reportOf(['Old', 'optimized']),
+    components: [{ file: 'f.jsx', name: 'Old', status: 'optimized', reason: null, triageStatus: 'optimized' }],
+  });
+  const now = {
+    ...reportOf(['Old', 'optimized'], ['NewBroken', 'error']),
+    components: [
+      { file: 'f.jsx', name: 'Old', status: 'optimized', reason: null, triageStatus: 'optimized' },
+      {
+        file: 'f.jsx',
+        name: 'NewBroken',
+        status: 'error',
+        reason: 'hooks',
+        triageStatus: 'fixable-bail',
+        category: 'Hooks',
+      },
+    ],
+  };
+  const { regressions } = diffAgainstBaseline(now, baseline);
   assert.equal(regressions.length, 1);
   assert.equal(regressions[0].key, 'f.jsx:NewBroken');
   assert.equal(regressions[0].from, '(new)');
-  assert.equal(regressions[0].to, 'error');
+  assert.equal(regressions[0].to, 'fixable-bail');
+});
+
+test('v1 baseline (no triage map) keeps the old status-rank gate and does not invent triage regressions', () => {
+  const v1 = {
+    coveragePct: 25,
+    components: {
+      'f.jsx:Header': 'optimized',
+      'f.jsx:ProductCard': 'silent',
+      'f.jsx:Broken': 'error',
+    },
+  };
+  const unchanged = {
+    coveragePct: 25,
+    coverageAvailable: true,
+    totals: {},
+    components: [
+      { file: 'f.jsx', name: 'Header', status: 'optimized', reason: null, triageStatus: 'optimized' },
+      { file: 'f.jsx', name: 'ProductCard', status: 'silent', reason: null, triageStatus: 'wont-benefit' },
+      { file: 'f.jsx', name: 'Broken', status: 'error', reason: 'hooks', triageStatus: 'fixable-bail', category: 'Hooks' },
+    ],
+  };
+  const same = diffAgainstBaseline(unchanged, v1);
+  assert.deepEqual(same.regressions, []);
+  assert.deepEqual(same.warnings, [], 'v1 must not emit triage warnings it has no baseline for');
+
+  const silentDrop = {
+    ...unchanged,
+    components: unchanged.components.map((c) =>
+      c.name === 'Header' ? { ...c, status: 'silent', triageStatus: 'wont-benefit' } : c,
+    ),
+  };
+  const dropped = diffAgainstBaseline(silentDrop, v1);
+  assert.equal(dropped.regressions.length, 1, 'v1 still fails optimized → silent (pre-triage gate)');
+  assert.equal(dropped.regressions[0].from, 'optimized');
+  assert.equal(dropped.regressions[0].to, 'silent');
+  assert.equal(dropped.warnings.length, 0, 'v1 does not add a parallel triage warning');
+});
+
+test('--strict fails optimized → silent even on a v2 triage baseline', () => {
+  const report = runCoverage('test/fixtures');
+  const baseline = toBaseline(report);
+  assert.ok(baseline.triage, 'v2 baseline must include a triage map');
+  const regressed = {
+    ...report,
+    components: report.components.map((c) =>
+      c.name === 'Header' ? { ...c, status: 'silent', triageStatus: 'wont-benefit' } : c,
+    ),
+  };
+  const loose = diffAgainstBaseline(regressed, baseline);
+  assert.equal(loose.regressions.length, 0);
+  assert.equal(loose.warnings.length, 1);
+
+  const strict = diffAgainstBaseline(regressed, baseline, { strict: true });
+  assert.equal(strict.regressions.length, 1);
+  assert.equal(strict.regressions[0].from, 'optimized');
+  assert.equal(strict.regressions[0].to, 'silent');
 });
 
 test('a brand-new silent component does NOT fail the gate', () => {
   const baseline = toBaseline(reportOf(['Old', 'optimized']));
   const now = reportOf(['Old', 'optimized'], ['NewSilent', 'silent']);
-  assert.deepEqual(diffAgainstBaseline(now, baseline), []);
+  assert.deepEqual(diffAgainstBaseline(now, baseline).regressions, []);
+});
+
+test('triage certifies wont-benefit and categorizes fixable bails', () => {
+  const report = runCoverage('test/fixtures');
+  const byName = Object.fromEntries(report.components.map((c) => [c.name, c]));
+  assert.equal(byName.ProductCard.triageStatus, 'wont-benefit');
+  assert.equal(byName.Header.triageStatus, 'optimized');
+  assert.equal(byName.BrokenComponent.triageStatus, 'fixable-bail');
+  assert.equal(byName.BrokenComponent.category, 'Hooks');
+  assert.equal(byName.LegacyWidget.triageStatus, 'opted-out');
+  assert.ok(report.triage);
+  assert.equal(report.triage.wontBenefit, 1);
+  assert.equal(report.triage.fixableBail, 1);
+  assert.equal(report.triage.bailByCategory.Hooks, 1);
 });
 
 test('enumerates memo, forwardRef, and class components', () => {

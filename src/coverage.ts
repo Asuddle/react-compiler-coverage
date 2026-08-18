@@ -5,10 +5,11 @@ import { collectEvents } from './collect.js';
 import { scanBuildOutput, detectBuildBundler } from './collect-build.js';
 import { mergeBuildAndBabelEvents } from './merge-events.js';
 import { reconcile } from './reconcile.js';
+import { applyTriage } from './triage.js';
 import { resolveCompilerPlugin } from './babel.js';
 import { detectCompilerBackend, defaultBuildDir, loadProjectConfigWarnings } from './compiler-backend.js';
 import { resolveCompilerOptionsWithWarnings } from './compiler-config.js';
-import type { ComponentRecord, CoverageOptions, CoverageReport, CoverageTotals, LoggerEvent, SkippedFile } from './types.js';
+import type { ComponentRecord, CoverageOptions, CoverageReport, CoverageTotals, LoggerEvent, SkippedFile, TriageTotals } from './types.js';
 
 const EXT = /\.(jsx?|tsx?)$/;
 const IGNORE = new Set(['node_modules', 'dist', 'build', '.git', '.next', 'coverage']);
@@ -45,6 +46,7 @@ export interface AnalyzeResult {
 
 interface FileEventResult {
   events: LoggerEvent[];
+  babelEvents: LoggerEvent[];
   buildReliable: boolean;
   warnings: string[];
 }
@@ -59,28 +61,30 @@ function collectFileEvents(
   const warnings: string[] = [];
 
   if (backend !== 'swc') {
-    return { events: collectEvents(code, file, options), buildReliable: true, warnings };
+    const babelEvents = collectEvents(code, file, options);
+    return { events: babelEvents, babelEvents, buildReliable: true, warnings };
   }
 
   const buildDir = options?.buildDir ?? defaultBuildDir();
   if (!buildDir) {
     warnings.push(SWC_NO_BUILD_DIR);
-    return { events: [], buildReliable: false, warnings };
+    return { events: [], babelEvents: collectEvents(code, file, options), buildReliable: false, warnings };
   }
 
   const scan = scanBuildOutput(file, buildDir, components);
   warnings.push(...scan.warnings);
 
+  const babelEvents = collectEvents(code, file, options);
+
   if (!scan.reliable) {
     warnings.push(SWC_UNRELIABLE_BUILD);
-    return { events: [], buildReliable: false, warnings };
+    return { events: [], babelEvents, buildReliable: false, warnings };
   }
 
-  const babelEvents = collectEvents(code, file, options);
   const diagnosticEvents = babelEvents.filter((e) => e.kind !== 'CompileSuccess');
   const events = mergeBuildAndBabelEvents(diagnosticEvents, scan.events, components);
 
-  return { events, buildReliable: true, warnings };
+  return { events, babelEvents, buildReliable: true, warnings };
 }
 
 /**
@@ -94,15 +98,17 @@ export function analyzeFile(
   const code = fs.readFileSync(file, 'utf8');
   try {
     const locations = enumerateComponents(code, file);
-    const { events, buildReliable, warnings: fileWarnings } = collectFileEvents(
+    const { events, babelEvents, buildReliable, warnings: fileWarnings } = collectFileEvents(
       code,
       file,
       locations,
       options,
     );
     if (warnings) warnings.push(...fileWarnings);
+    const components = reconcile(locations, events);
+    applyTriage(components, babelEvents);
     return {
-      components: reconcile(locations, events),
+      components,
       buildReliable,
     };
   } catch (err) {
@@ -122,6 +128,37 @@ function dedupeRecords(components: ComponentRecord[]): ComponentRecord[] {
     out.push(c);
   }
   return out;
+}
+
+function computeTriageTotals(components: ComponentRecord[]): TriageTotals {
+  const totals: TriageTotals = {
+    wontBenefit: 0,
+    fixableBail: 0,
+    unsupported: 0,
+    optedOut: 0,
+    bailByCategory: {},
+  };
+  for (const c of components) {
+    if (!c.triageStatus) continue;
+    switch (c.triageStatus) {
+      case 'wont-benefit':
+        totals.wontBenefit++;
+        break;
+      case 'fixable-bail':
+        totals.fixableBail++;
+        if (c.category) totals.bailByCategory[c.category] = (totals.bailByCategory[c.category] ?? 0) + 1;
+        break;
+      case 'unsupported':
+        totals.unsupported++;
+        break;
+      case 'opted-out':
+        totals.optedOut++;
+        break;
+      default:
+        break;
+    }
+  }
+  return totals;
 }
 
 /** Run coverage over a file or directory. */
@@ -182,9 +219,13 @@ export function runCoverage(target: string, options?: CoverageOptions): Coverage
         ? 'component coverage (Babel)'
         : 'component coverage';
 
+  const triageTotals = computeTriageTotals(components);
+  const hasTriage = components.some((c) => c.triageStatus != null);
+
   return {
     components,
     totals,
+    triage: hasTriage ? triageTotals : undefined,
     coveragePct,
     coverageAvailable,
     coverageLabel,

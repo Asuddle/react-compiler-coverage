@@ -1,5 +1,12 @@
 export type ComponentStatus = 'optimized' | 'error' | 'skipped' | 'silent';
 
+export type TriageStatus =
+  | 'optimized'
+  | 'fixable-bail'
+  | 'unsupported'
+  | 'opted-out'
+  | 'wont-benefit';
+
 export interface ComponentRecord {
   name: string;
   file: string;
@@ -8,6 +15,13 @@ export interface ComponentRecord {
   status: ComponentStatus;
   reason: string | null;
   memoBlocks?: number;
+  /** Babel-logger triage (see docs/silent-diagnosis-design.md). */
+  triageStatus?: TriageStatus;
+  category?: string;
+  triageReason?: string;
+  at?: { line: number };
+  extraBails?: number;
+  unknownCategory?: boolean;
 }
 
 export interface LoggerEvent {
@@ -28,6 +42,14 @@ export interface CoverageTotals {
   skipped: number;
   silent: number;
   total: number;
+}
+
+export interface TriageTotals {
+  wontBenefit: number;
+  fixableBail: number;
+  unsupported: number;
+  optedOut: number;
+  bailByCategory: Record<string, number>;
 }
 
 export interface SkippedFile {
@@ -55,6 +77,8 @@ export interface CoverageOptions {
 export interface CoverageReport {
   components: ComponentRecord[];
   totals: CoverageTotals;
+  /** Per-component triage from isolated Babel logger (Babel path; supplementary on SWC). */
+  triage?: TriageTotals;
   /** null when coverageAvailable is false — do not show a percentage. */
   coveragePct: number | null;
   /** False on SWC when build-dir scan is missing or unreliable (minified). */

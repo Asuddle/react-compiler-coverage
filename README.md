@@ -45,6 +45,7 @@ npx react-compiler-coverage check src
 | `--build-dir <path>` | Unminified build output (`.next`, `dist`) for SWC/Turbopack scanning |
 | `--allow-skipped` | Don't fail `check` when files couldn't be parsed |
 | `--allow-unavailable` | Don't exit when SWC coverage is unavailable (minified / no build) |
+| `--strict` | Fail `check` on any health drop (`optimized → silent` included). Restores the pre-0.2.0 gate. |
 
 Set `REACT_COMPILER_COVERAGE_CONFIG=/path/to/options.json` to override config via env.
 
@@ -205,17 +206,22 @@ coverage denominator.
 | `2` | No components found, or no baseline file |
 | `3` | **Coverage unavailable** (SWC without unminified `--build-dir`) |
 
-Regressions that fail the gate:
+Regressions that fail the gate (v2 baseline, after `baseline` is re-run):
 
-- Any component drops in health (`optimized → silent`, `optimized → error`, etc.)
+- `optimized → fixable-bail` (or `error`) — you broke the compiler for this component
+- A brand-new component in an `error` / `fixable-bail` state
+
+`optimized → silent` / `wont-benefit` **warns** and does **not** fail, unless you
+pass `--strict`. That change is intentional: most of those are legitimate
+simplifications. `--strict` restores the old “any health drop fails” gate.
+
+**v1 baselines** (no `triage` map) keep the old status-rank gate until you
+re-baseline. Upgrading the package does not silently loosen CI.
 
 Regressions that **don't** fail the gate:
 
 - New `silent` or `skipped` components (common and often intentional)
 - Adding `'use no memo'` to an already-silent component (`silent → skipped`)
-
-New components in an **`error`** state always fail — that's an unambiguous break
-introduced by the PR.
 
 ```sh
 # Typical CI workflow (Next.js)
